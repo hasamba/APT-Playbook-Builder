@@ -1,0 +1,5 @@
+__pycache__/
+*.py[cod]
+*-prompt-preview.md
+*-preview.md
+*-playbook.md
