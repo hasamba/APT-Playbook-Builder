@@ -16,6 +16,7 @@ import os
 import re
 import sys
 from datetime import date
+from pathlib import Path
 import urllib.error
 import urllib.parse
 import urllib.request
@@ -622,6 +623,346 @@ def sanitize_generated_text(content: str) -> str:
     return "\n".join(lines).strip() + "\n"
 
 
+def render_html_report(markdown: str, title: str = "APT Playbook Report") -> str:
+    clean_markdown = sanitize_generated_text(markdown)
+    body = markdown_to_html(clean_markdown)
+    escaped_title = html.escape(title)
+    generated_date = date.today().isoformat()
+    return f"""<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>{escaped_title}</title>
+  <style>
+    :root {{
+      --bg: #f5f7fa;
+      --panel: #ffffff;
+      --ink: #172033;
+      --muted: #5d6b82;
+      --line: #d8e0ec;
+      --accent: #1d6f8f;
+      --accent-dark: #13506a;
+      --code-bg: #101820;
+      --code-ink: #e7eef8;
+      --soft: #e9f4f7;
+    }}
+    * {{ box-sizing: border-box; }}
+    body {{
+      margin: 0;
+      background: var(--bg);
+      color: var(--ink);
+      font-family: "Segoe UI", Roboto, Arial, sans-serif;
+      line-height: 1.58;
+    }}
+    .report-shell {{
+      max-width: 1180px;
+      margin: 0 auto;
+      padding: 32px 24px 56px;
+    }}
+    .report-header {{
+      border: 1px solid var(--line);
+      background: linear-gradient(135deg, #ffffff 0%, #eef7f9 100%);
+      padding: 28px;
+      margin-bottom: 18px;
+      border-radius: 8px;
+    }}
+    .eyebrow {{
+      color: var(--accent-dark);
+      font-size: 12px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      margin-bottom: 8px;
+    }}
+    .report-header h1 {{
+      margin: 0;
+      font-size: clamp(28px, 5vw, 46px);
+      line-height: 1.08;
+      letter-spacing: 0;
+    }}
+    .meta {{
+      margin-top: 12px;
+      color: var(--muted);
+      font-size: 14px;
+    }}
+    .content {{
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 28px;
+    }}
+    h1, h2, h3, h4 {{
+      color: var(--ink);
+      line-height: 1.24;
+      letter-spacing: 0;
+    }}
+    .content h1 {{ font-size: 32px; margin: 0 0 18px; }}
+    .content h2 {{
+      margin: 34px 0 12px;
+      padding-top: 18px;
+      border-top: 1px solid var(--line);
+      font-size: 25px;
+    }}
+    .content h3 {{
+      margin: 24px 0 10px;
+      color: var(--accent-dark);
+      font-size: 19px;
+    }}
+    .content h4 {{ margin: 20px 0 8px; font-size: 16px; }}
+    p {{ margin: 0 0 14px; }}
+    ul, ol {{ padding-left: 24px; margin: 0 0 16px; }}
+    li {{ margin: 5px 0; }}
+    strong {{ color: #0f172a; }}
+    a {{ color: var(--accent-dark); }}
+    code {{
+      background: var(--soft);
+      color: #123544;
+      padding: 2px 5px;
+      border-radius: 4px;
+      font-family: Consolas, "Cascadia Mono", monospace;
+      font-size: .92em;
+    }}
+    pre {{
+      overflow-x: auto;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 8px;
+      padding: 16px;
+      border: 1px solid #263646;
+      margin: 14px 0 20px;
+    }}
+    pre code {{
+      background: transparent;
+      color: inherit;
+      padding: 0;
+      border-radius: 0;
+      font-size: 13px;
+      line-height: 1.48;
+      display: block;
+    }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin: 16px 0 22px;
+      font-size: 14px;
+    }}
+    th, td {{
+      border: 1px solid var(--line);
+      padding: 9px 10px;
+      vertical-align: top;
+      text-align: left;
+    }}
+    th {{ background: #edf4f7; color: #123544; }}
+    blockquote {{
+      margin: 16px 0;
+      padding: 12px 16px;
+      border-left: 4px solid var(--accent);
+      background: #f1f8fa;
+      color: #314257;
+    }}
+    hr {{
+      border: 0;
+      border-top: 1px solid var(--line);
+      margin: 28px 0;
+    }}
+    @media (max-width: 720px) {{
+      .report-shell {{ padding: 18px 12px 36px; }}
+      .report-header, .content {{ padding: 18px; }}
+      table {{ display: block; overflow-x: auto; white-space: nowrap; }}
+    }}
+  </style>
+</head>
+<body>
+  <main class="report-shell">
+    <header class="report-header">
+      <div class="eyebrow">Velociraptor DFIR Playbook</div>
+      <h1>{escaped_title}</h1>
+      <div class="meta">Generated {generated_date} by APT Playbook Builder</div>
+    </header>
+    <article class="content">
+{body}
+    </article>
+  </main>
+</body>
+</html>
+"""
+
+
+def markdown_to_html(markdown: str) -> str:
+    lines = markdown.splitlines()
+    html_lines: list[str] = []
+    paragraph: list[str] = []
+    list_stack: list[str] = []
+    in_code = False
+    code_lang = ""
+    code_lines: list[str] = []
+    index = 0
+
+    def close_paragraph() -> None:
+        if paragraph:
+            html_lines.append(f"<p>{render_inline(' '.join(paragraph))}</p>")
+            paragraph.clear()
+
+    def close_lists() -> None:
+        while list_stack:
+            html_lines.append(f"</{list_stack.pop()}>")
+
+    def close_code() -> None:
+        nonlocal in_code, code_lang, code_lines
+        language_class = f' class="language-{html.escape(code_lang)}"' if code_lang else ""
+        code = html.escape("\n".join(code_lines))
+        html_lines.append(f"<pre><code{language_class}>{code}</code></pre>")
+        in_code = False
+        code_lang = ""
+        code_lines = []
+
+    while index < len(lines):
+        line = lines[index]
+        stripped = line.strip()
+
+        if stripped.startswith("```"):
+            if in_code:
+                close_code()
+            else:
+                close_paragraph()
+                close_lists()
+                in_code = True
+                code_lang = stripped[3:].strip().split(" ", 1)[0]
+                code_lines = []
+            index += 1
+            continue
+
+        if in_code:
+            code_lines.append(line)
+            index += 1
+            continue
+
+        if not stripped:
+            close_paragraph()
+            close_lists()
+            index += 1
+            continue
+
+        if stripped == "---":
+            close_paragraph()
+            close_lists()
+            html_lines.append("<hr>")
+            index += 1
+            continue
+
+        table = collect_markdown_table(lines, index)
+        if table:
+            close_paragraph()
+            close_lists()
+            html_lines.append(render_markdown_table(table))
+            index += len(table)
+            continue
+
+        heading_match = re.match(r"^(#{1,4})\s+(.+)$", stripped)
+        if heading_match:
+            close_paragraph()
+            close_lists()
+            level = len(heading_match.group(1))
+            html_lines.append(f"<h{level}>{render_inline(heading_match.group(2))}</h{level}>")
+            index += 1
+            continue
+
+        unordered = re.match(r"^[-*]\s+(.+)$", stripped)
+        ordered = re.match(r"^\d+[.)]\s+(.+)$", stripped)
+        if unordered or ordered:
+            close_paragraph()
+            tag = "ul" if unordered else "ol"
+            if not list_stack or list_stack[-1] != tag:
+                close_lists()
+                list_stack.append(tag)
+                html_lines.append(f"<{tag}>")
+            item = (unordered or ordered).group(1)
+            html_lines.append(f"<li>{render_inline(item)}</li>")
+            index += 1
+            continue
+
+        if stripped.startswith(">"):
+            close_paragraph()
+            close_lists()
+            quote = stripped.lstrip(">").strip()
+            html_lines.append(f"<blockquote>{render_inline(quote)}</blockquote>")
+            index += 1
+            continue
+
+        paragraph.append(stripped)
+        index += 1
+
+    if in_code:
+        close_code()
+    close_paragraph()
+    close_lists()
+    return "\n".join(f"      {line}" for line in html_lines)
+
+
+def collect_markdown_table(lines: list[str], start: int) -> list[str] | None:
+    if start + 1 >= len(lines):
+        return None
+    header = lines[start].strip()
+    separator = lines[start + 1].strip()
+    if "|" not in header or not re.fullmatch(r"\|?\s*:?-{3,}:?\s*(\|\s*:?-{3,}:?\s*)+\|?", separator):
+        return None
+
+    table = [header, separator]
+    for line in lines[start + 2 :]:
+        stripped = line.strip()
+        if "|" not in stripped:
+            break
+        table.append(stripped)
+    return table
+
+
+def render_markdown_table(table: list[str]) -> str:
+    headers = split_table_row(table[0])
+    rows = [split_table_row(row) for row in table[2:]]
+    output = ["<table>", "<thead>", "<tr>"]
+    output.extend(f"<th>{render_inline(cell)}</th>" for cell in headers)
+    output.extend(["</tr>", "</thead>", "<tbody>"])
+    for row in rows:
+        output.append("<tr>")
+        padded = row + [""] * max(0, len(headers) - len(row))
+        output.extend(f"<td>{render_inline(cell)}</td>" for cell in padded[: len(headers)])
+        output.append("</tr>")
+    output.extend(["</tbody>", "</table>"])
+    return "\n".join(output)
+
+
+def split_table_row(row: str) -> list[str]:
+    row = row.strip().strip("|")
+    return [cell.strip() for cell in row.split("|")]
+
+
+def render_inline(text: str) -> str:
+    escaped = html.escape(text)
+    code_spans: list[str] = []
+
+    def stash_code(match: re.Match[str]) -> str:
+        code_spans.append(f"<code>{match.group(1)}</code>")
+        return f"@@CODE{len(code_spans) - 1}@@"
+
+    escaped = re.sub(r"`([^`]+)`", stash_code, escaped)
+    escaped = re.sub(r"\*\*([^*]+)\*\*", r"<strong>\1</strong>", escaped)
+    escaped = re.sub(r"\*([^*]+)\*", r"<em>\1</em>", escaped)
+    escaped = re.sub(
+        r"\[([^\]]+)\]\((https?://[^)]+)\)",
+        r'<a href="\2" rel="noreferrer">\1</a>',
+        escaped,
+    )
+    escaped = re.sub(
+        r"(?<![\"=])(https?://[^\s<]+)",
+        r'<a href="\1" rel="noreferrer">\1</a>',
+        escaped,
+    )
+    for idx, code in enumerate(code_spans):
+        escaped = escaped.replace(f"@@CODE{idx}@@", code)
+    return escaped
+
+
 def default_output_path(group: Group, no_ai: bool = False) -> str:
     suffix = "prompt-preview" if no_ai else "playbook"
     return f"{safe_filename_part(group.name or group.id)}-{suffix}.md"
@@ -671,6 +1012,21 @@ def write_output(path: str, content: str) -> None:
     os.replace(temp_path, output_path)
 
 
+def html_output_path(markdown_path: str) -> str:
+    path = Path(markdown_path)
+    if path.suffix.lower() == ".md":
+        return str(path.with_suffix(".html"))
+    return f"{markdown_path}.html"
+
+
+def write_html_output(path: str, markdown: str, title: str) -> None:
+    output_path = os.path.abspath(path)
+    temp_path = f"{output_path}.tmp"
+    with open(temp_path, "w", encoding="utf-8", newline="\n") as handle:
+        handle.write(render_html_report(markdown, title=title))
+    os.replace(temp_path, output_path)
+
+
 def build_arg_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Build a DFIR playbook for a selected MITRE ATT&CK group."
@@ -687,6 +1043,15 @@ def build_arg_parser() -> argparse.ArgumentParser:
     parser.add_argument(
         "--output",
         help="Write output to this file. Default: <group>-playbook.md. Use '-' to print to stdout.",
+    )
+    parser.add_argument(
+        "--html-output",
+        help="Write HTML report to this file. Default: same path as Markdown with .html extension.",
+    )
+    parser.add_argument(
+        "--no-html",
+        action="store_true",
+        help="Do not write the companion HTML report.",
     )
     parser.add_argument("--api-key", help="AI API key. Prefer OPENROUTER_API_KEY env var.")
     parser.add_argument("--api-base-url", help=f"AI API base URL. Default: {DEFAULT_API_BASE_URL}")
@@ -744,6 +1109,11 @@ def main(argv: list[str] | None = None) -> int:
     if output_path != "-":
         write_output(output_path, output)
         print(f"\nWrote output to {output_path}")
+        if not args.no_html:
+            html_path = args.html_output or html_output_path(output_path)
+            report_title = f"{group.name} ({group.id}) {'Prompt Preview' if args.no_ai else 'Playbook'}"
+            write_html_output(html_path, output, title=report_title)
+            print(f"Wrote HTML report to {html_path}")
     else:
         print("\n" + output)
 

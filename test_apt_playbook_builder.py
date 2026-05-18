@@ -5,10 +5,13 @@ from apt_playbook_builder import (
     ReferenceSource,
     build_source_context,
     default_output_path,
+    html_output_path,
     make_prompt,
+    markdown_to_html,
     parse_group_page,
     parse_groups,
     parse_reference_source,
+    render_html_report,
     sanitize_generated_text,
 )
 
@@ -119,6 +122,24 @@ class ParserTests(unittest.TestCase):
         self.assertIn("Notebook Post-Process VQL", prompt)
         self.assertIn("Velociraptor notebook", prompt)
         self.assertIn("fenced `vql` code blocks", prompt)
+
+    def test_html_output_path_replaces_markdown_suffix(self):
+        self.assertEqual(html_output_path("APT29-playbook.md"), "APT29-playbook.html")
+        self.assertEqual(html_output_path("report.txt"), "report.txt.html")
+
+    def test_markdown_to_html_preserves_vql_code_block(self):
+        rendered = markdown_to_html("## Query\n\n```vql\nSELECT * FROM source()\n```")
+
+        self.assertIn("<h2>Query</h2>", rendered)
+        self.assertIn('class="language-vql"', rendered)
+        self.assertIn("SELECT * FROM source()", rendered)
+
+    def test_render_html_report_wraps_markdown_with_title(self):
+        rendered = render_html_report("# APT29\n\n**Triage**", title="APT29 Playbook")
+
+        self.assertIn("<title>APT29 Playbook</title>", rendered)
+        self.assertIn("Velociraptor DFIR Playbook", rendered)
+        self.assertIn("<strong>Triage</strong>", rendered)
 
 
 if __name__ == "__main__":

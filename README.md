@@ -22,8 +22,10 @@ No third-party Python packages are required.
 python .\apt_playbook_builder.py
 ```
 
-By default, the report is written to `<group>-playbook.md`, for example
-`APT29-playbook.md`.
+By default, the report is written to Markdown and HTML files:
+
+- `APT29-playbook.md`
+- `APT29-playbook.html`
 
 Filter the group list before choosing:
 
@@ -47,6 +49,21 @@ Write the playbook to a Markdown file:
 
 ```powershell
 python .\apt_playbook_builder.py --search APT29 --output APT29-playbook.md
+```
+
+This also writes `APT29-playbook.html` by default. To choose a custom HTML path:
+
+```powershell
+python .\apt_playbook_builder.py `
+  --search APT29 `
+  --output APT29-playbook.md `
+  --html-output reports\APT29.html
+```
+
+Disable HTML generation:
+
+```powershell
+python .\apt_playbook_builder.py --search APT29 --no-html
 ```
 
 Print to the console instead of writing a file:
